@@ -93,23 +93,31 @@ class GoogleDriveHelper:
         for text in var:
             query += f"name contains '{text}' and "
         query += "trashed=false"
-        if parent_id != "root":
-            response = self.__service.files().list(supportsTeamDrives=True,
-                                                   includeTeamDriveItems=True,
-                                                   teamDriveId=parent_id,
-                                                   q=query,
-                                                   corpora='drive',
-                                                   spaces='drive',
-                                                   pageSize=1000,
-                                                   fields='files(id, name, mimeType, size, teamDriveId, parents)',
-                                                   orderBy='folder, modifiedTime desc').execute()["files"]
-        else:
-            response = self.__service.files().list(q=query + " and 'me' in owners",
-                                                   pageSize=1000,
-                                                   spaces='drive',
-                                                   fields='files(id, name, mimeType, size, parents)',
-                                                   orderBy='folder, modifiedTime desc').execute()["files"]
-        return response
+        return (
+            self.__service.files()
+            .list(
+                supportsTeamDrives=True,
+                includeTeamDriveItems=True,
+                teamDriveId=parent_id,
+                q=query,
+                corpora='drive',
+                spaces='drive',
+                pageSize=1000,
+                fields='files(id, name, mimeType, size, teamDriveId, parents)',
+                orderBy='folder, modifiedTime desc',
+            )
+            .execute()["files"]
+            if parent_id != "root"
+            else self.__service.files()
+            .list(
+                q=f"{query} and 'me' in owners",
+                pageSize=1000,
+                spaces='drive',
+                fields='files(id, name, mimeType, size, parents)',
+                orderBy='folder, modifiedTime desc',
+            )
+            .execute()["files"]
+        )
 
     def edit_telegraph(self):
         nxt_page = 1
@@ -134,27 +142,21 @@ class GoogleDriveHelper:
         search_type = None
         if re.search("^-d ", fileName, re.IGNORECASE):
             search_type = '-d'
-            fileName = fileName[ 2 : len(fileName)]
+            fileName = fileName[2:]
         elif re.search("^-f ", fileName, re.IGNORECASE):
             search_type = '-f'
-            fileName = fileName[ 2 : len(fileName)]
+            fileName = fileName[2:]
         if len(fileName) > 2:
             remove_list = ['A', 'a', 'X', 'x']
             if fileName[1] == ' ' and fileName[0] in remove_list:
-                fileName = fileName[ 2 : len(fileName) ]
+                fileName = fileName[2:]
         msg = ''
-        INDEX = -1
         content_count = 0
         reached_max_limit = False
         add_title_msg = True
-        for parent_id in DRIVE_ID :
+        for INDEX, parent_id in enumerate(DRIVE_ID):
             add_drive_title = True
-            response = self.drive_query(parent_id, search_type, fileName)
-            #LOGGER.info(f"my a: {response}")
-
-            INDEX += 1
-            if response:
-
+            if response := self.drive_query(parent_id, search_type, fileName):
                 for file in response:
 
                     if add_title_msg == True:
@@ -165,14 +167,14 @@ class GoogleDriveHelper:
                         add_drive_title = False
                     if file.get('mimeType') == "application/vnd.google-apps.folder":  # Detect Whether Current Entity is a Folder or File.
                         msg += f"🗃️<code>{file.get('name')}</code> <b>(folder)</b><br>" \
-                               f"<b><a href='https://drive.google.com/drive/folders/{file.get('id')}'>Google Drive link</a></b>"
+                                   f"<b><a href='https://drive.google.com/drive/folders/{file.get('id')}'>Google Drive link</a></b>"
                         if INDEX_URL[INDEX] is not None:
                             url_path = "/".join([requests.utils.quote(n, safe='') for n in self.get_recursive_list(file, parent_id)])
                             url = f'{INDEX_URL[INDEX]}/{url_path}/'
                             msg += f'<b> | <a href="{url}">Index link</a></b>'
                     else:
                         msg += f"<code>{file.get('name')}</code> <b>({self.get_readable_file_size(file.get('size'))})</b><br>" \
-                               f"<b><a href='https://drive.google.com/uc?id={file.get('id')}&export=download'>Google Drive link</a></b>"
+                                   f"<b><a href='https://drive.google.com/uc?id={file.get('id')}&export=download'>Google Drive link</a></b>"
                         if INDEX_URL[INDEX] is not None:
                             url_path = "/".join([requests.utils.quote(n, safe ='') for n in self.get_recursive_list(file, parent_id)])
                             url = f'{INDEX_URL[INDEX]}/{url_path}'
